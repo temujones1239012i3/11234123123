@@ -480,27 +480,9 @@ RunService.Heartbeat:Connect(function()
 end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed or DEBOUNCE or input.KeyCode ~= Enum.KeyCode.F then return end
+    if gameProcessed or input.KeyCode ~= Enum.KeyCode.F then return end
     
-    local currentTime = tick()
-    
-    if currentTime - LAST_F_PRESS <= DOUBLE_PRESS_THRESHOLD then
-        if not DEBOUNCE then
-            DEBOUNCE = true
-            fireQuantumTeleport()
-            wait(0.5)
-            DEBOUNCE = false
-        end
-    else
-        if not DEBOUNCE then
-            DEBOUNCE = true
-            toggleDesync()
-            wait(0.3)
-            DEBOUNCE = false
-        end
-    end
-    
-    LAST_F_PRESS = currentTime
+    startBtn.MouseButton1Click:Fire()
 end)
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
@@ -535,5 +517,117 @@ game:GetService("CoreGui").ChildRemoved:Connect(function(child)
         startBtn.MouseButton1Click:Connect(function()
             spamF()
         end)
+    end
+end)
+
+local FIRE_INTERVAL = 0.1
+local SPEED_MULTIPLIER = 5
+local GRAPPLE_TOOL_NAME = "Grapple Hook"
+
+local GrappleEvent = ReplicatedStorage.Packages.Net["RE/UseItem"]
+
+local movementConnection = nil
+local fireConnection = nil
+local isHoldingGrapple = false
+
+local function checkForGrappleHook()
+    if character then
+        local tool = character:FindFirstChild(GRAPPLE_TOOL_NAME)
+        if tool and tool:IsA("Tool") then
+            return true
+        end
+    end
+    return false
+end
+
+local function applyDirectVelocity()
+    if character and character:FindFirstChild("HumanoidRootPart") and isHoldingGrapple then
+        local rootPart = character.HumanoidRootPart
+        local moveVector = Humanoid.MoveDirection
+        
+        if moveVector.Magnitude > 0 then
+            local currentVelocity = rootPart.AssemblyLinearVelocity
+            local targetVelocity = Vector3.new(
+                moveVector.X * Humanoid.WalkSpeed * SPEED_MULTIPLIER,
+                currentVelocity.Y,
+                moveVector.Z * Humanoid.WalkSpeed * SPEED_MULTIPLIER
+            )
+            rootPart.AssemblyLinearVelocity = targetVelocity
+        end
+    end
+end
+
+local function fireGrappleHook()
+    if isHoldingGrapple then
+        pcall(function()
+            GrappleEvent:FireServer(0.70743885040283)
+        end)
+    end
+end
+
+local function startFireLoop()
+    if fireConnection then
+        fireConnection:Disconnect()
+    end
+    
+    fireConnection = spawn(function()
+        while character and character.Parent do
+            fireGrappleHook()
+            wait(FIRE_INTERVAL)
+        end
+    end)
+end
+
+local function startMovementLoop()
+    if movementConnection then
+        movementConnection:Disconnect()
+    end
+    
+    movementConnection = RunService.Heartbeat:Connect(function()
+        isHoldingGrapple = checkForGrappleHook()
+        applyDirectVelocity()
+    end)
+end
+
+local function initializeGrapple()
+    startFireLoop()
+    startMovementLoop()
+    print("Grapple-conditional speed script active!")
+    print("Hold the '" .. GRAPPLE_TOOL_NAME .. "' tool to activate speed boost!")
+end
+
+local function onCharacterAddedGrapple(newCharacter)
+    character = newCharacter
+    Humanoid = character:WaitForChild("Humanoid")
+    HumanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    isHoldingGrapple = false
+    
+    if movementConnection then
+        movementConnection:Disconnect()
+        movementConnection = nil
+    end
+    if fireConnection then
+        fireConnection:Disconnect()
+        fireConnection = nil
+    end
+    
+    wait(1)
+    initializeGrapple()
+end
+
+LocalPlayer.CharacterAdded:Connect(onCharacterAddedGrapple)
+
+if character and character.Parent then
+    initializeGrapple()
+end
+
+Players.PlayerRemoving:Connect(function(plr)
+    if plr == LocalPlayer then
+        if movementConnection then
+            movementConnection:Disconnect()
+        end
+        if fireConnection then
+            fireConnection:Disconnect()
+        end
     end
 end)
