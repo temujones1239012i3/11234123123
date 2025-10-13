@@ -23,7 +23,7 @@ local commands = {
     "morph"
 }
 
-local ADMIN_RAW_URL = "https://raw.githubusercontent.com/thetoaster97/99123/refs/heads/main/4.lua"
+local ADMIN_RAW_URL = "https://raw.githubusercontent.com/temujones1239012i3/11234123123/refs/heads/main/4.lua"
 
 local function find_queue()
     if type(queue_on_teleport) == "function" then return queue_on_teleport end
