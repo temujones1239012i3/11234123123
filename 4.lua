@@ -1271,3 +1271,269 @@ if player.Character then
 end
 
 player.CharacterAdded:Connect(initRagdollControls)
+
+
+local Lighting = game:GetService("Lighting")
+
+local function applyFullBright()
+    Lighting.ClockTime = 12
+    Lighting.TimeOfDay = "12:00:00"
+    Lighting.Brightness = 1
+    Lighting.ExposureCompensation = 0
+    Lighting.Ambient = Color3.fromRGB(200,200,200)
+    Lighting.OutdoorAmbient = Color3.fromRGB(200,200,200)
+    Lighting.FogEnd = 100000
+    Lighting.GlobalShadows = false
+end
+
+applyFullBright()
+RunService.RenderStepped:Connect(applyFullBright)
+
+local function makeAir(part)
+    if part:IsA("BasePart") and part.Material == Enum.Material.SmoothPlastic then
+        part.Material = Enum.Material.Air
+    end
+end
+
+for _, part in ipairs(workspace:GetDescendants()) do
+    makeAir(part)
+end
+workspace.DescendantAdded:Connect(makeAir)
+
+local function applyDecorationsTransparency(parent)
+    for _, obj in ipairs(parent:GetDescendants()) do
+        if obj:IsA("Folder") and obj.Name == "Decorations" then
+            for _, part in ipairs(obj:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 0.4
+                end
+            end
+        end
+    end
+end
+
+applyDecorationsTransparency(workspace)
+
+workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Folder") and obj.Name == "Decorations" then
+        for _, part in ipairs(obj:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Transparency = 0.4
+            end
+        end
+    elseif obj:IsA("BasePart") then
+        local parent = obj:FindFirstAncestorWhichIsA("Folder")
+        while parent do
+            if parent.Name == "Decorations" then
+                obj.Transparency = 0.4
+                break
+            end
+            parent = parent.Parent
+        end
+    end
+end)
+
+local function stripVisualItems(character)
+    if not character then return end
+    for _, item in ipairs(character:GetChildren()) do
+        if item:IsA("Accessory")
+            or item:IsA("Clothing")
+            or item:IsA("ShirtGraphic")
+            or item:IsA("Pants")
+            or item:IsA("Shirt")
+            or item:IsA("LayeredClothing")
+        then
+            item:Destroy()
+        end
+    end
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr.Character then
+        stripVisualItems(plr.Character)
+    end
+    plr.CharacterAdded:Connect(stripVisualItems)
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(stripVisualItems)
+    if plr.Character then
+        stripVisualItems(plr.Character)
+    end
+end)
+
+player.CharacterAdded:Connect(stripVisualItems)
+if player.Character then
+    stripVisualItems(player.Character)
+end
+
+local tracked = {
+    others = setmetatable({}, { __mode = "k" }),
+    localp = setmetatable({}, { __mode = "k" }),
+    sentry = setmetatable({}, { __mode = "k" }),
+    trap   = setmetatable({}, { __mode = "k" }),
+}
+local conns = setmetatable({}, { __mode = "k" })
+
+local function safeSet(part, prop, val)
+    if not part or not part.Parent then return end
+    pcall(function() part[prop] = val end)
+end
+
+local function safeGet(part, prop)
+    if not part or not part.Parent then return nil end
+    local ok, v = pcall(function() return part[prop] end)
+    return ok and v or nil
+end
+
+local function applyOtherSettings(part)
+    safeSet(part, "CanCollide", false)
+    safeSet(part, "CanQuery",   false)
+    safeSet(part, "CanTouch",   false)
+end
+
+local function applyLocalSettings(part)
+    safeSet(part, "CanQuery", false)
+end
+
+local function applySentrySettings(part)
+    safeSet(part, "CanCollide", true)
+    safeSet(part, "CanQuery",   false)
+    safeSet(part, "CanTouch",   true)
+end
+
+local function applyTrapSettings(part)
+    safeSet(part, "CanCollide", false)
+    safeSet(part, "CanQuery",   false)
+    safeSet(part, "CanTouch",   false)
+end
+
+local function stopWatching(part)
+    local list = conns[part]
+    if list then
+        for _, c in ipairs(list) do
+            pcall(function() c:Disconnect() end)
+        end
+        conns[part] = nil
+    end
+    tracked.others[part] = nil
+    tracked.localp[part] = nil
+    tracked.sentry[part] = nil
+    tracked.trap[part] = nil
+end
+
+local function watchPart(part, category)
+    if not part or not part:IsA("BasePart") then return end
+    if conns[part] then return end
+    conns[part] = {}
+    
+    if category == "others" then 
+        tracked.others[part] = true 
+        applyOtherSettings(part)
+    elseif category == "local" then 
+        tracked.localp[part] = true 
+        applyLocalSettings(part)
+    elseif category == "sentry" then 
+        tracked.sentry[part] = true 
+        applySentrySettings(part)
+    elseif category == "trap" then 
+        tracked.trap[part] = true 
+        applyTrapSettings(part) 
+    end
+    
+    local props = {}
+    if category == "others" then 
+        props = {"CanCollide","CanQuery","CanTouch"}
+    elseif category == "local" then 
+        props = {"CanQuery"}
+    elseif category == "sentry" then 
+        props = {"CanCollide","CanQuery"}
+    elseif category == "trap" then 
+        props = {"CanCollide","CanQuery","CanTouch"} 
+    end
+    
+    for _, prop in ipairs(props) do
+        local ok, sig = pcall(function() return part:GetPropertyChangedSignal(prop) end)
+        if ok and sig then
+            table.insert(conns[part], sig:Connect(function()
+                task.defer(function()
+                    if not part or not part.Parent then return end
+                    if category == "others" then applyOtherSettings(part)
+                    elseif category == "local" then applyLocalSettings(part)
+                    elseif category == "sentry" then applySentrySettings(part)
+                    elseif category == "trap"   then applyTrapSettings(part) end
+                end)
+            end))
+        end
+    end
+    
+    table.insert(conns[part], part.AncestryChanged:Connect(function()
+        if not part:IsDescendantOf(game) then
+            stopWatching(part)
+        end
+    end))
+end
+
+local function applyToContainer(container, category)
+    if not container then return end
+    for _, obj in ipairs(container:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            watchPart(obj, category)
+        end
+    end
+    container.DescendantAdded:Connect(function(desc)
+        if desc:IsA("BasePart") then
+            watchPart(desc, category)
+        end
+    end)
+end
+
+local function onOtherPlayerAdded(plr)
+    if plr == player then return end
+    plr.CharacterAdded:Connect(function(char)
+        applyToContainer(char, "others")
+    end)
+    if plr.Character then applyToContainer(plr.Character, "others") end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do onOtherPlayerAdded(p) end
+Players.PlayerAdded:Connect(onOtherPlayerAdded)
+
+local function onLocalCharacter(char)
+    if not char then return end
+    applyToContainer(char, "local")
+end
+
+if player.Character then onLocalCharacter(player.Character) end
+player.CharacterAdded:Connect(onLocalCharacter)
+
+local function processWorkspacePart(p)
+    if not p:IsA("BasePart") then return end
+    local name = (p.Name or ""):lower()
+    if name:find("sentry") then
+        watchPart(p, "sentry")
+    elseif name:find("trap") then
+        watchPart(p, "trap")
+    end
+end
+
+for _, obj in ipairs(workspace:GetDescendants()) do processWorkspacePart(obj) end
+workspace.DescendantAdded:Connect(processWorkspacePart)
+
+task.spawn(function()
+    while true do
+        task.wait(0.35)
+        for part in pairs(tracked.others) do 
+            if part and part.Parent then applyOtherSettings(part) end 
+        end
+        for part in pairs(tracked.localp) do 
+            if part and part.Parent then applyLocalSettings(part) end 
+        end
+        for part in pairs(tracked.sentry) do 
+            if part and part.Parent then applySentrySettings(part) end 
+        end
+        for part in pairs(tracked.trap) do 
+            if part and part.Parent then applyTrapSettings(part) end 
+        end
+    end
+end)
