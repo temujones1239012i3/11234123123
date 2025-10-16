@@ -56,7 +56,7 @@ local ScriptModules = {}
 
 -- Each module has: name, category, init (function to start), cleanup (function to stop), active (boolean), and stored data
 ScriptModules["PetTracker"] = {
-    name = "Best Pet Tracker",
+    name = "Brainrot ESP",
     category = "ESP",
     active = false,
     data = {},
