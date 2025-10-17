@@ -29,6 +29,8 @@ local function getIsFile()
 end
 
 local function saveSettings()
+    if not ScriptModules then return end
+    
     -- Save to shared immediately
     local settings = {}
     for key, module in pairs(ScriptModules) do
@@ -48,6 +50,11 @@ local function saveSettings()
 end
 
 local function loadSettings()
+    if not ScriptModules then 
+        warn("[Vster Hub] ScriptModules not initialized yet")
+        return false 
+    end
+    
     local settings = nil
     
     -- Method 1: Check shared memory (instant, works across script reloads)
