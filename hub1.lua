@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -11,6 +10,11 @@ local player = Players.LocalPlayer
 local SETTINGS_KEY = "ScriptHub_Settings_" .. tostring(game.PlaceId)
 
 local function saveSettings()
+    if not writefile then
+        warn("[Vster Hub] writefile not available in this executor")
+        return
+    end
+    
     local settings = {}
     for key, module in pairs(ScriptModules) do
         settings[key] = module.active
@@ -26,6 +30,11 @@ local function saveSettings()
 end
 
 local function loadSettings()
+    if not readfile then
+        warn("[Vster Hub] readfile not available in this executor")
+        return false
+    end
+    
     local success, result = pcall(function()
         return readfile(SETTINGS_KEY .. ".json")
     end)
@@ -53,6 +62,84 @@ end
 -- SCRIPT STORAGE
 -- =======================
 local ScriptModules = {}
+
+-- =======================
+-- AUTO-RELOAD (ALWAYS ACTIVE)
+-- =======================
+local ADMIN_RAW_URL = "https://raw.githubusercontent.com/thetoaster97/99123/refs/heads/main/15.lua"
+
+local function setupAutoReload()
+    if shared._AutoReloadQueued then
+        print("[Auto-Reload] Already queued this session")
+        return
+    end
+    shared._AutoReloadQueued = true
+    
+    -- Track initial JobId
+    if not shared._InitialJobId then
+        shared._InitialJobId = game.JobId
+    end
+    
+    local function find_queue()
+        if type(queue_on_teleport) == "function" then return queue_on_teleport end
+        if syn and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
+        if secure_load and type(secure_load.queue_on_teleport) == "function" then return secure_load.queue_on_teleport end
+        if KRNL and type(KRNL.queue_on_teleport) == "function" then return KRNL.queue_on_teleport end
+        for k,v in pairs(_G) do
+            if type(v) == "function" and tostring(k):lower():find("queue_on_teleport") then
+                return v
+            end
+        end
+        return nil
+    end
+    
+    local queue_func = find_queue()
+    if queue_func and ADMIN_RAW_URL and ADMIN_RAW_URL ~= "" then
+        local queued_payload = [[
+            -- Only load if we're server hopping (different JobId but same game)
+            if shared._InitialJobId and game.JobId ~= shared._InitialJobId and game.PlaceId == ]] .. tostring(game.PlaceId) .. [[ then
+                local url = "]] .. ADMIN_RAW_URL .. [["
+                local function safeGet(u)
+                    if syn and type(syn.request) == "function" then
+                        local ok,res = pcall(function() return syn.request({Url=u,Method="GET"}).Body end)
+                        if ok and res then return res end
+                    end
+                    if type(http_request)=="function" then
+                        local ok,res = pcall(function() return http_request({Url=u}).Body end)
+                        if ok and res then return res end
+                    end
+                    if type(request)=="function" then
+                        local ok,res = pcall(function() return request({Url=u}).Body end)
+                        if ok and res then return res end
+                    end
+                    if type(game.HttpGet)=="function" then
+                        local ok,res = pcall(function() return game:HttpGet(u) end)
+                        if ok and res then return res end
+                    end
+                    local HttpService = game:GetService("HttpService")
+                    local ok,res = pcall(function() return HttpService:GetAsync(u) end)
+                    if ok and res then return res end
+                    return nil
+                end
+                local code = safeGet(url)
+                if code then
+                    local fn = loadstring(code)
+                    if fn then pcall(fn) end
+                    print("[Auto-Reload] Loaded after server hop!")
+                end
+            else
+                print("[Auto-Reload] Skipped - not a server hop")
+            end
+        ]]
+        pcall(function() queue_func(queued_payload) end)
+        print("[Auto-Reload] Queued for server hop (always active)")
+    else
+        warn("[Auto-Reload] queue_on_teleport API not available")
+    end
+end
+
+-- Setup auto-reload immediately
+setupAutoReload()
 
 -- Each module has: name, category, init (function to start), cleanup (function to stop), active (boolean), and stored data
 ScriptModules["PetTracker"] = {
@@ -1015,91 +1102,6 @@ ScriptModules["AntiHit"] = {
         end
         
         print("[Anti-Hit] Deactivated")
-    end
-}
-
-ScriptModules["AutoReload"] = {
-    name = "Auto-Reload (Server Hop Only)",
-    category = "Misc",
-    active = false,
-    data = {},
-    
-    init = function(self)
-        local ADMIN_RAW_URL = "https://raw.githubusercontent.com/thetoaster97/99123/refs/heads/main/15.lua"
-        
-        if shared._AutoReloadQueued then
-            print("[Auto-Reload] Already queued this session")
-            return
-        end
-        shared._AutoReloadQueued = true
-        
-        -- Track initial JobId
-        if not shared._InitialJobId then
-            shared._InitialJobId = game.JobId
-        end
-        
-        local function find_queue()
-            if type(queue_on_teleport) == "function" then return queue_on_teleport end
-            if syn and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
-            if secure_load and type(secure_load.queue_on_teleport) == "function" then return secure_load.queue_on_teleport end
-            if KRNL and type(KRNL.queue_on_teleport) == "function" then return KRNL.queue_on_teleport end
-            for k,v in pairs(_G) do
-                if type(v) == "function" and tostring(k):lower():find("queue_on_teleport") then
-                    return v
-                end
-            end
-            return nil
-        end
-        
-        local queue_func = find_queue()
-        if queue_func and ADMIN_RAW_URL and ADMIN_RAW_URL ~= "" then
-            local queued_payload = [[
-                -- Only load if we're server hopping (different JobId but same game)
-                if shared._InitialJobId and game.JobId ~= shared._InitialJobId and game.PlaceId == ]] .. tostring(game.PlaceId) .. [[ then
-                    local url = "]] .. ADMIN_RAW_URL .. [["
-                    local function safeGet(u)
-                        if syn and type(syn.request) == "function" then
-                            local ok,res = pcall(function() return syn.request({Url=u,Method="GET"}).Body end)
-                            if ok and res then return res end
-                        end
-                        if type(http_request)=="function" then
-                            local ok,res = pcall(function() return http_request({Url=u}).Body end)
-                            if ok and res then return res end
-                        end
-                        if type(request)=="function" then
-                            local ok,res = pcall(function() return request({Url=u}).Body end)
-                            if ok and res then return res end
-                        end
-                        if type(game.HttpGet)=="function" then
-                            local ok,res = pcall(function() return game:HttpGet(u) end)
-                            if ok and res then return res end
-                        end
-                        local HttpService = game:GetService("HttpService")
-                        local ok,res = pcall(function() return HttpService:GetAsync(u) end)
-                        if ok and res then return res end
-                        return nil
-                    end
-                    local code = safeGet(url)
-                    if code then
-                        local fn = loadstring(code)
-                        if fn then pcall(fn) end
-                        print("[Auto-Reload] Loaded after server hop!")
-                    end
-                else
-                    print("[Auto-Reload] Skipped - not a server hop")
-                end
-            ]]
-            pcall(function() queue_func(queued_payload) end)
-            print("[Auto-Reload] Queued for server hop only")
-        else
-            warn("[Auto-Reload] queue_on_teleport API not available")
-        end
-    end,
-    
-    cleanup = function(self)
-        -- Can't really "cleanup" a queued teleport, but we can reset the flag
-        shared._AutoReloadQueued = false
-        print("[Auto-Reload] Deactivated")
     end
 }
 
