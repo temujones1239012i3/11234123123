@@ -5,56 +5,60 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
 -- =======================
--- SETTINGS PERSISTENCE
+-- SETTINGS PERSISTENCE - FIXED
 -- =======================
-local SETTINGS_KEY = "ScriptHub_Settings_" .. tostring(game.PlaceId)
+local SETTINGS_KEY = "VsterHub_Settings_" .. tostring(game.PlaceId)
 
 local function saveSettings()
-    if not writefile then
-        warn("[Vster Hub] writefile not available in this executor")
-        return
-    end
-    
-    local settings = {}
-    for key, module in pairs(ScriptModules) do
-        settings[key] = module.active
-    end
-    local success, err = pcall(function()
+    local success, result = pcall(function()
+        if not writefile then
+            return false
+        end
+        
+        local settings = {}
+        for key, module in pairs(ScriptModules) do
+            settings[key] = module.active
+        end
+        
         writefile(SETTINGS_KEY .. ".json", HttpService:JSONEncode(settings))
+        return true
     end)
-    if success then
-        print("[Vster Hub] Settings saved")
+    
+    if success and result then
+        print("[Vster Hub] Settings saved successfully")
     else
-        warn("[Vster Hub] Failed to save settings:", err)
+        warn("[Vster Hub] Failed to save settings - writefile not available")
     end
 end
 
 local function loadSettings()
-    if not readfile then
-        warn("[Vster Hub] readfile not available in this executor")
-        return false
-    end
-    
     local success, result = pcall(function()
-        return readfile(SETTINGS_KEY .. ".json")
+        if not readfile or not isfile then
+            return nil
+        end
+        
+        if not isfile(SETTINGS_KEY .. ".json") then
+            return nil
+        end
+        
+        local data = readfile(SETTINGS_KEY .. ".json")
+        return HttpService:JSONDecode(data)
     end)
-    if success and result then
-        local decodeSuccess, settings = pcall(function()
-            return HttpService:JSONDecode(result)
-        end)
-        if decodeSuccess and settings and type(settings) == "table" then
-            for key, active in pairs(settings) do
-                if ScriptModules[key] then
-                    ScriptModules[key].active = active
-                    if active then
-                        ScriptModules[key]:init()
-                    end
+    
+    if success and result and type(result) == "table" then
+        for key, active in pairs(result) do
+            if ScriptModules[key] then
+                ScriptModules[key].active = active
+                if active then
+                    ScriptModules[key]:init()
                 end
             end
-            print("[Vster Hub] Settings loaded")
-            return true
         end
+        print("[Vster Hub] Settings loaded successfully")
+        return true
     end
+    
+    print("[Vster Hub] No saved settings found or readfile not available")
     return false
 end
 
@@ -64,21 +68,16 @@ end
 local ScriptModules = {}
 
 -- =======================
--- AUTO-RELOAD (ALWAYS ACTIVE)
+-- AUTO-RELOAD (ALWAYS ACTIVE) - FIXED
 -- =======================
-local ADMIN_RAW_URL = "https://raw.githubusercontent.com/thetoaster97/99123/refs/heads/main/15.lua"
+local ADMIN_RAW_URL = "https://raw.githubusercontent.com/temujones1239012i3/11234123123/refs/heads/main/hub1.lua"
 
 local function setupAutoReload()
-    if shared._AutoReloadQueued then
-        print("[Auto-Reload] Already queued this session")
+    if shared._VsterAutoReloadQueued then
+        print("[Vster Hub] Auto-reload already queued this session")
         return
     end
-    shared._AutoReloadQueued = true
-    
-    -- Track initial JobId
-    if not shared._InitialJobId then
-        shared._InitialJobId = game.JobId
-    end
+    shared._VsterAutoReloadQueued = true
     
     local function find_queue()
         if type(queue_on_teleport) == "function" then return queue_on_teleport end
@@ -96,49 +95,45 @@ local function setupAutoReload()
     local queue_func = find_queue()
     if queue_func and ADMIN_RAW_URL and ADMIN_RAW_URL ~= "" then
         local queued_payload = [[
-            -- Only load if we're server hopping (different JobId but same game)
-            if shared._InitialJobId and game.JobId ~= shared._InitialJobId and game.PlaceId == ]] .. tostring(game.PlaceId) .. [[ then
-                local url = "]] .. ADMIN_RAW_URL .. [["
-                local function safeGet(u)
-                    if syn and type(syn.request) == "function" then
-                        local ok,res = pcall(function() return syn.request({Url=u,Method="GET"}).Body end)
-                        if ok and res then return res end
-                    end
-                    if type(http_request)=="function" then
-                        local ok,res = pcall(function() return http_request({Url=u}).Body end)
-                        if ok and res then return res end
-                    end
-                    if type(request)=="function" then
-                        local ok,res = pcall(function() return request({Url=u}).Body end)
-                        if ok and res then return res end
-                    end
-                    if type(game.HttpGet)=="function" then
-                        local ok,res = pcall(function() return game:HttpGet(u) end)
-                        if ok and res then return res end
-                    end
-                    local HttpService = game:GetService("HttpService")
-                    local ok,res = pcall(function() return HttpService:GetAsync(u) end)
+            local url = "]] .. ADMIN_RAW_URL .. [["
+            local function safeGet(u)
+                if syn and type(syn.request) == "function" then
+                    local ok,res = pcall(function() return syn.request({Url=u,Method="GET"}).Body end)
                     if ok and res then return res end
-                    return nil
                 end
-                local code = safeGet(url)
-                if code then
-                    local fn = loadstring(code)
-                    if fn then pcall(fn) end
-                    print("[Auto-Reload] Loaded after server hop!")
+                if type(http_request)=="function" then
+                    local ok,res = pcall(function() return http_request({Url=u}).Body end)
+                    if ok and res then return res end
                 end
-            else
-                print("[Auto-Reload] Skipped - not a server hop")
+                if type(request)=="function" then
+                    local ok,res = pcall(function() return request({Url=u}).Body end)
+                    if ok and res then return res end
+                end
+                if type(game.HttpGet)=="function" then
+                    local ok,res = pcall(function() return game:HttpGet(u) end)
+                    if ok and res then return res end
+                end
+                local HttpService = game:GetService("HttpService")
+                local ok,res = pcall(function() return HttpService:GetAsync(u) end)
+                if ok and res then return res end
+                return nil
+            end
+            local code = safeGet(url)
+            if code then
+                local fn = loadstring(code)
+                if fn then 
+                    pcall(fn)
+                    print("[Vster Hub] Auto-reloaded after teleport!")
+                end
             end
         ]]
         pcall(function() queue_func(queued_payload) end)
-        print("[Auto-Reload] Queued for server hop (always active)")
+        print("[Vster Hub] Auto-reload queued successfully")
     else
-        warn("[Auto-Reload] queue_on_teleport API not available")
+        warn("[Vster Hub] queue_on_teleport API not available")
     end
 end
 
--- Setup auto-reload immediately
 setupAutoReload()
 
 -- Each module has: name, category, init (function to start), cleanup (function to stop), active (boolean), and stored data
@@ -1453,4 +1448,113 @@ for key in pairs(ScriptModules) do
     updateAllToggles(key)
 end
 
-print("[Vster Hub] Loaded successfully! Toggle scripts on/off from the GUI.")
+ScriptModules["AutoFire"] = {
+    name = "Auto-Fire Weapons",
+    category = "Combat",
+    active = false,
+    data = {},
+    
+    init = function(self)
+        local Event = game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Net"):WaitForChild("RE/UseItem")
+        self.data.currentTool = nil
+        self.data.fireConnection = nil
+        
+        local function fireToolAtPlayer(tool, target)
+            if not tool or not target or not target.Character then return end
+            local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            
+            if tool.Name == "Laser Cape" or tool.Name == "Web Slinger" then
+                Event:FireServer(hrp.Position, hrp)
+            elseif tool.Name == "Taser Gun" then
+                Event:FireServer(hrp)
+            elseif tool.Name == "Bee Launcher" then
+                Event:FireServer(target)
+            end
+        end
+        
+        local function getClosestPlayer()
+            local char = player.Character
+            if not char then return nil end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return nil end
+            
+            local closest, closestDist = nil, math.huge
+            for _, other in ipairs(Players:GetPlayers()) do
+                if other ~= player and other.Character then
+                    local ohrp = other.Character:FindFirstChild("HumanoidRootPart")
+                    if ohrp then
+                        local dist = (hrp.Position - ohrp.Position).Magnitude
+                        if dist < closestDist then
+                            closestDist, closest = dist, other
+                        end
+                    end
+                end
+            end
+            return closest
+        end
+        
+        local function stopAutoFire()
+            if self.data.fireConnection then
+                self.data.fireConnection:Disconnect()
+                self.data.fireConnection = nil
+            end
+        end
+        
+        local function startAutoFire(tool)
+            stopAutoFire()
+            self.data.fireConnection = RunService.Heartbeat:Connect(function()
+                if not self.active then
+                    stopAutoFire()
+                    return
+                end
+                if not tool or tool.Parent ~= player.Character then
+                    stopAutoFire()
+                    return
+                end
+                local target = getClosestPlayer()
+                if target then
+                    fireToolAtPlayer(tool, target)
+                end
+            end)
+        end
+        
+        self.data.toolCheckConnection = RunService.Heartbeat:Connect(function()
+            if not self.active then return end
+            local char = player.Character
+            if not char then return end
+            
+            local equippedTool = nil
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Tool") then
+                    equippedTool = item
+                    break
+                end
+            end
+            
+            if equippedTool ~= self.data.currentTool then
+                self.data.currentTool = equippedTool
+                if self.data.currentTool then
+                    startAutoFire(self.data.currentTool)
+                else
+                    stopAutoFire()
+                end
+            end
+        end)
+        
+        print("[Auto-Fire] Activated - Equip a weapon to auto-fire!")
+    end,
+    
+    cleanup = function(self)
+        if self.data.fireConnection then
+            self.data.fireConnection:Disconnect()
+            self.data.fireConnection = nil
+        end
+        if self.data.toolCheckConnection then
+            self.data.toolCheckConnection:Disconnect()
+            self.data.toolCheckConnection = nil
+        end
+        self.data.currentTool = nil
+        print("[Auto-Fire] Deactivated")
+    end
+}
