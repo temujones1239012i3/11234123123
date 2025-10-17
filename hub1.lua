@@ -4,65 +4,95 @@ local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
+
 -- =======================
--- SETTINGS PERSISTENCE - WORKING VERSION
+-- SETTINGS PERSISTENCE - INSTANT LOAD (DELTA/VOLCANO)
 -- =======================
 local SETTINGS_KEY = "VsterHub_Settings_" .. tostring(game.PlaceId)
 
--- Initialize global storage if it doesn't exist
-if not _G.VsterHubSettings then
-    _G.VsterHubSettings = {}
+-- Shared global storage for instant access
+if not shared.VsterHubSettings then
+    shared.VsterHubSettings = {}
+end
+
+-- Try multiple file operation methods
+local function getWriteFile()
+    return writefile or write_file or (syn and syn.write_file)
+end
+
+local function getReadFile()
+    return readfile or read_file or (syn and syn.read_file)
+end
+
+local function getIsFile()
+    return isfile or is_file or (syn and syn.is_file)
 end
 
 local function saveSettings()
+    -- Save to shared immediately
     local settings = {}
     for key, module in pairs(ScriptModules) do
         settings[key] = module.active
     end
+    shared.VsterHubSettings[SETTINGS_KEY] = settings
     
-    _G.VsterHubSettings[SETTINGS_KEY] = settings
-    
-    -- Optional: Try to save to file as backup (will fail silently if not supported)
-    pcall(function()
-        if writefile then
-            writefile(SETTINGS_KEY .. ".json", HttpService:JSONEncode(settings))
+    -- Also save to file for cross-session persistence
+    task.spawn(function()
+        local writeFunc = getWriteFile()
+        if writeFunc then
+            pcall(function()
+                writeFunc(SETTINGS_KEY .. ".txt", HttpService:JSONEncode(settings))
+            end)
         end
     end)
-    
-    print("[Vster Hub] Settings saved successfully")
 end
 
 local function loadSettings()
-    -- First try to load from _G (always available)
-    local settings = _G.VsterHubSettings[SETTINGS_KEY]
+    local settings = nil
     
-    -- If not in _G, try to load from file
-    if not settings then
-        pcall(function()
-            if readfile and isfile and isfile(SETTINGS_KEY .. ".json") then
-                local data = readfile(SETTINGS_KEY .. ".json")
-                settings = HttpService:JSONDecode(data)
-                -- Store in _G for next time
-                _G.VsterHubSettings[SETTINGS_KEY] = settings
+    -- Method 1: Check shared memory (instant, works across script reloads)
+    if shared.VsterHubSettings[SETTINGS_KEY] then
+        settings = shared.VsterHubSettings[SETTINGS_KEY]
+        print("[Vster Hub] ✓ Loaded from memory (instant)")
+    else
+        -- Method 2: Try file system
+        local readFunc = getReadFile()
+        local isFileFunc = getIsFile()
+        
+        if readFunc and isFileFunc then
+            local success, result = pcall(function()
+                if isFileFunc(SETTINGS_KEY .. ".txt") then
+                    local data = readFunc(SETTINGS_KEY .. ".txt")
+                    return HttpService:JSONDecode(data)
+                end
+                return nil
+            end)
+            
+            if success and result then
+                settings = result
+                shared.VsterHubSettings[SETTINGS_KEY] = settings
+                print("[Vster Hub] ✓ Loaded from file")
             end
-        end)
+        end
     end
     
-    -- Apply loaded settings
+    -- Apply settings immediately
     if settings and type(settings) == "table" then
         for key, active in pairs(settings) do
             if ScriptModules[key] then
                 ScriptModules[key].active = active
                 if active then
-                    ScriptModules[key]:init()
+                    task.spawn(function()
+                        pcall(function()
+                            ScriptModules[key]:init()
+                        end)
+                    end)
                 end
             end
         end
-        print("[Vster Hub] Settings loaded successfully")
         return true
     end
     
-    print("[Vster Hub] No saved settings found")
     return false
 end
 
@@ -1438,19 +1468,6 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
--- Update canvas size when scripts change
-scriptsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    scriptsFrame.CanvasSize = UDim2.new(0, 0, 0, scriptsList.AbsoluteContentSize.Y + 20)
-end)
-
--- Load saved settings
-task.wait(0.5)
-loadSettings()
-
--- Update UI to reflect loaded settings
-for key in pairs(ScriptModules) do
-    updateAllToggles(key)
-end
 
 ScriptModules["AutoFire"] = {
     name = "Auto-Fire Weapons",
@@ -1562,3 +1579,19 @@ ScriptModules["AutoFire"] = {
         print("[Auto-Fire] Deactivated")
     end
 }
+
+-- Update canvas size when scripts change
+scriptsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    scriptsFrame.CanvasSize = UDim2.new(0, 0, 0, scriptsList.AbsoluteContentSize.Y + 20)
+end)
+
+-- Load saved settings
+task.spawn(function()
+    task.wait(0.5)
+    loadSettings()
+    
+    -- Update UI to reflect loaded settings
+    for key in pairs(ScriptModules) do
+        updateAllToggles(key)
+    end
+end)
