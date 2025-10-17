@@ -5,48 +5,52 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
 -- =======================
--- SETTINGS PERSISTENCE - FIXED
+-- SETTINGS PERSISTENCE - WORKING VERSION
 -- =======================
 local SETTINGS_KEY = "VsterHub_Settings_" .. tostring(game.PlaceId)
 
+-- Initialize global storage if it doesn't exist
+if not _G.VsterHubSettings then
+    _G.VsterHubSettings = {}
+end
+
 local function saveSettings()
-    local success, result = pcall(function()
-        if not writefile then
-            return false
+    local settings = {}
+    for key, module in pairs(ScriptModules) do
+        settings[key] = module.active
+    end
+    
+    _G.VsterHubSettings[SETTINGS_KEY] = settings
+    
+    -- Optional: Try to save to file as backup (will fail silently if not supported)
+    pcall(function()
+        if writefile then
+            writefile(SETTINGS_KEY .. ".json", HttpService:JSONEncode(settings))
         end
-        
-        local settings = {}
-        for key, module in pairs(ScriptModules) do
-            settings[key] = module.active
-        end
-        
-        writefile(SETTINGS_KEY .. ".json", HttpService:JSONEncode(settings))
-        return true
     end)
     
-    if success and result then
-        print("[Vster Hub] Settings saved successfully")
-    else
-        warn("[Vster Hub] Failed to save settings - writefile not available")
-    end
+    print("[Vster Hub] Settings saved successfully")
 end
 
 local function loadSettings()
-    local success, result = pcall(function()
-        if not readfile or not isfile then
-            return nil
-        end
-        
-        if not isfile(SETTINGS_KEY .. ".json") then
-            return nil
-        end
-        
-        local data = readfile(SETTINGS_KEY .. ".json")
-        return HttpService:JSONDecode(data)
-    end)
+    -- First try to load from _G (always available)
+    local settings = _G.VsterHubSettings[SETTINGS_KEY]
     
-    if success and result and type(result) == "table" then
-        for key, active in pairs(result) do
+    -- If not in _G, try to load from file
+    if not settings then
+        pcall(function()
+            if readfile and isfile and isfile(SETTINGS_KEY .. ".json") then
+                local data = readfile(SETTINGS_KEY .. ".json")
+                settings = HttpService:JSONDecode(data)
+                -- Store in _G for next time
+                _G.VsterHubSettings[SETTINGS_KEY] = settings
+            end
+        end)
+    end
+    
+    -- Apply loaded settings
+    if settings and type(settings) == "table" then
+        for key, active in pairs(settings) do
             if ScriptModules[key] then
                 ScriptModules[key].active = active
                 if active then
@@ -58,7 +62,7 @@ local function loadSettings()
         return true
     end
     
-    print("[Vster Hub] No saved settings found or readfile not available")
+    print("[Vster Hub] No saved settings found")
     return false
 end
 
