@@ -181,7 +181,7 @@ setupAutoReload()
 ScriptModules["PetTracker"] = {
     name = "Brainrot ESP",
     category = "ESP",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
@@ -414,7 +414,7 @@ ScriptModules["PetTracker"] = {
 ScriptModules["PlayerESP"] = {
     name = "Player ESP",
     category = "ESP",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
@@ -519,7 +519,7 @@ ScriptModules["PlayerESP"] = {
 ScriptModules["TimerESP"] = {
     name = "Timer ESP",
     category = "ESP",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
@@ -638,7 +638,7 @@ ScriptModules["TimerESP"] = {
 ScriptModules["InfiniteJump"] = {
     name = "Infinite Jump",
     category = "Movement",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
@@ -680,7 +680,7 @@ ScriptModules["InfiniteJump"] = {
 ScriptModules["GrappleSpeed"] = {
     name = "Grapple Hook Speed",
     category = "Movement",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
@@ -785,7 +785,7 @@ ScriptModules["GrappleSpeed"] = {
 ScriptModules["AntiHit"] = {
     name = "Anti-Hit (Desync)",
     category = "Combat",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
@@ -1479,7 +1479,7 @@ end)
 ScriptModules["AutoFire"] = {
     name = "Auto-Fire Weapons",
     category = "Combat",
-    active = false,
+    active = true,
     data = {},
     
     init = function(self)
