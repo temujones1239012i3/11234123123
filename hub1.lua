@@ -103,13 +103,9 @@ local function loadSettings()
     return false
 end
 
--- =======================
--- SCRIPT STORAGE
--- =======================
-local ScriptModules = {}
 
 -- =======================
--- AUTO-RELOAD (ALWAYS ACTIVE) - FIXED
+-- AUTO-RELOAD (ALWAYS ACTIVE) - DELTA/VOLCANO FIXED
 -- =======================
 local ADMIN_RAW_URL = "https://raw.githubusercontent.com/temujones1239012i3/11234123123/refs/heads/main/hub1.lua"
 
@@ -120,62 +116,134 @@ local function setupAutoReload()
     end
     shared._VsterAutoReloadQueued = true
     
+    -- Try multiple queue_on_teleport functions for different executors
     local function find_queue()
+        -- Delta
         if type(queue_on_teleport) == "function" then return queue_on_teleport end
+        
+        -- Volcano
+        if type(queueonteleport) == "function" then return queueonteleport end
+        
+        -- Synapse
         if syn and type(syn.queue_on_teleport) == "function" then return syn.queue_on_teleport end
-        if secure_load and type(secure_load.queue_on_teleport) == "function" then return secure_load.queue_on_teleport end
+        
+        -- KRNL
         if KRNL and type(KRNL.queue_on_teleport) == "function" then return KRNL.queue_on_teleport end
+        
+        -- Search in _G
         for k,v in pairs(_G) do
-            if type(v) == "function" and tostring(k):lower():find("queue_on_teleport") then
-                return v
+            if type(v) == "function" then
+                local name = tostring(k):lower()
+                if name:find("queue") and name:find("teleport") then
+                    return v
+                end
             end
         end
+        
+        -- Search in getgenv
+        if getgenv then
+            local env = getgenv()
+            for k,v in pairs(env) do
+                if type(v) == "function" then
+                    local name = tostring(k):lower()
+                    if name:find("queue") and name:find("teleport") then
+                        return v
+                    end
+                end
+            end
+        end
+        
         return nil
     end
     
     local queue_func = find_queue()
+    
     if queue_func and ADMIN_RAW_URL and ADMIN_RAW_URL ~= "" then
         local queued_payload = [[
+            task.wait(0.5)
             local url = "]] .. ADMIN_RAW_URL .. [["
+            
             local function safeGet(u)
-                if syn and type(syn.request) == "function" then
-                    local ok,res = pcall(function() return syn.request({Url=u,Method="GET"}).Body end)
-                    if ok and res then return res end
-                end
-                if type(http_request)=="function" then
-                    local ok,res = pcall(function() return http_request({Url=u}).Body end)
-                    if ok and res then return res end
-                end
-                if type(request)=="function" then
-                    local ok,res = pcall(function() return request({Url=u}).Body end)
-                    if ok and res then return res end
-                end
-                if type(game.HttpGet)=="function" then
-                    local ok,res = pcall(function() return game:HttpGet(u) end)
-                    if ok and res then return res end
-                end
-                local HttpService = game:GetService("HttpService")
-                local ok,res = pcall(function() return HttpService:GetAsync(u) end)
+                -- Try game:HttpGet first (most compatible)
+                local ok, res = pcall(function() 
+                    return game:HttpGet(u) 
+                end)
                 if ok and res then return res end
+                
+                -- Try http_request
+                if type(http_request) == "function" then
+                    ok, res = pcall(function() 
+                        return http_request({Url=u, Method="GET"}).Body 
+                    end)
+                    if ok and res then return res end
+                end
+                
+                -- Try request
+                if type(request) == "function" then
+                    ok, res = pcall(function() 
+                        return request({Url=u, Method="GET"}).Body 
+                    end)
+                    if ok and res then return res end
+                end
+                
+                -- Try syn.request
+                if syn and type(syn.request) == "function" then
+                    ok, res = pcall(function() 
+                        return syn.request({Url=u, Method="GET"}).Body 
+                    end)
+                    if ok and res then return res end
+                end
+                
+                -- Try HttpService
+                local HttpService = game:GetService("HttpService")
+                ok, res = pcall(function() 
+                    return HttpService:GetAsync(u) 
+                end)
+                if ok and res then return res end
+                
                 return nil
             end
+            
             local code = safeGet(url)
             if code then
-                local fn = loadstring(code)
+                local fn, err = loadstring(code)
                 if fn then 
-                    pcall(fn)
-                    print("[Vster Hub] Auto-reloaded after teleport!")
+                    local success = pcall(fn)
+                    if success then
+                        print("[Vster Hub] ✓ Auto-reloaded after teleport!")
+                    else
+                        warn("[Vster Hub] Script loaded but failed to run")
+                    end
+                else
+                    warn("[Vster Hub] Failed to compile script: " .. tostring(err))
                 end
+            else
+                warn("[Vster Hub] Failed to fetch script from GitHub")
             end
         ]]
-        pcall(function() queue_func(queued_payload) end)
-        print("[Vster Hub] Auto-reload queued successfully")
+        
+        local success = pcall(function() 
+            queue_func(queued_payload) 
+        end)
+        
+        if success then
+            print("[Vster Hub] ✓ Auto-reload queued (works on Delta & Volcano)")
+        else
+            warn("[Vster Hub] Failed to queue auto-reload")
+        end
     else
-        warn("[Vster Hub] queue_on_teleport API not available")
+        warn("[Vster Hub] queue_on_teleport not available on this executor")
     end
 end
 
 setupAutoReload()
+
+-- =======================
+-- SCRIPT STORAGE
+-- =======================
+
+local ScriptModules = {}
+
 
 -- Each module has: name, category, init (function to start), cleanup (function to stop), active (boolean), and stored data
 ScriptModules["PetTracker"] = {
