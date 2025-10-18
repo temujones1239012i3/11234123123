@@ -1592,31 +1592,17 @@ scriptsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     scriptsFrame.CanvasSize = UDim2.new(0, 0, 0, scriptsList.AbsoluteContentSize.Y + 20)
 end)
 
--- AUTO-START ALL MODULES
-task.spawn(function()
-    task.wait(1)
-    
-    print("[Vster Hub] Starting all modules...")
-    
-    for key, module in pairs(ScriptModules) do
-        if module.active then
-            local success, err = pcall(function()
-                module:init()
-            end)
-            
-            if success then
-                print("[Vster Hub] ✓ Started: " .. module.name)
-            else
-                warn("[Vster Hub] ✗ Failed to start " .. module.name .. ": " .. tostring(err))
-            end
-        end
-    end
-    
-    -- Update UI
-    task.wait(0.2)
-    for key in pairs(ScriptModules) do
-        updateAllToggles(key)
-    end
-    
-    print("[Vster Hub] ✅ All modules running!")
-end)
+-- FORCE START ALL MODULES
+for key, module in pairs(ScriptModules) do
+    module.active = true
+    module:init()
+    print("[Vster Hub] Started: " .. module.name)
+end
+
+-- Update UI buttons
+task.wait(0.1)
+for key in pairs(ScriptModules) do
+    updateAllToggles(key)
+end
+
+print("[Vster Hub] ALL MODULES ARE NOW RUNNING")
